@@ -7,6 +7,7 @@ import (
 	"sync"
 	"crypto/tls"
 	"net/http"
+	"strings"
 
 	"github.com/go-resty/resty"
 	minio "github.com/minio/minio-go"
@@ -155,9 +156,11 @@ func wrapLoad(bucket, key, urlval, jld string) int {
 
 	//     { "id": "1", "fields":
 	jb := fmt.Sprintf("{\"document\": { \"id\": \"%s\", \"bucket\": \"%s\",  \"fields\": %s }}", key, bucket, value)
-
-	puturl := fmt.Sprintf("http://localhost:10002/rest/%s", key) /// -http-port defines in blast startup
-client := resty.New()
+//  fmt.Println(jb)
+//	newkey := strings.ReplaceAll(key, "/","__") // go v1.12
+	newkey := strings.Replace(key, "/","__",-1)
+	puturl := fmt.Sprintf("http://127.0.0.1:10002/rest/%s", newkey) /// -http-port defines in blast startup
+	client := resty.New()
 	resp, err := client.R().
 		SetBody(jb).
 		Put(puturl)
