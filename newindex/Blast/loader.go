@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"crypto/tls"
+	"net/http"
 
 	"github.com/go-resty/resty"
 	minio "github.com/minio/minio-go"
@@ -22,14 +24,15 @@ type Entry struct {
 func main() {
 	fmt.Println("blast loader")
 	mc := miniConnection() // minio connection
-
+fmt.Println(listBuckets(mc))
 	// for loop these...
 	// f := []string{"baltoopendaporg", "cdfregistry", "csdco", "dataneotomadborg", "dsirisedu", "earthreforg",
 	// 	"getiedadataorg", "opencoredataorg", "opentopographyorg",
 	// 	"wikilinkedearth", "wwwbco-dmoorg", "wwwhydroshareorg", "wwwunavcoorg"}
 
 	// for loop these...
-	f := []string{"portaledirepositoryorg"}
+//	f := []string{"getiedadataorg", "dsirisedu", "opencore", "wwwhydroshareorg", "wwwbco-dmoorg"}
+	f := []string{"getiedadataorg"} //, "dsirisedu", "opencore", "wwwhydroshareorg", "wwwbco-dmoorg"}
 
 	for x := range f {
 		entries := getObjects(mc, f[x])
@@ -75,18 +78,22 @@ func getObjects(mc *minio.Client, bucketname string) []Entry {
 	doneCh := make(chan struct{}) // Create a done channel to control 'ListObjectsV2' go routine.
 	defer close(doneCh)           // Indicate to our routine to exit cleanly upon return.
 	isRecursive := true
-	objectCh := mc.ListObjectsV2(bucketname, "", isRecursive, doneCh)
+	pathname := "gleaner-summoned"
+// path and bucket swapped path in bucket, bucketname in path
+	objectCh := mc.ListObjectsV2(pathname, bucketname, isRecursive, doneCh)
 
 	var entries []Entry
 
 	for object := range objectCh {
 		if object.Err != nil {
+  			fmt.Println("object error")
 			fmt.Println(object.Err)
 			return nil
 		}
-
-		fo, err := mc.GetObject(bucketname, object.Key, minio.GetObjectOptions{})
+// path is really the bucket
+		fo, err := mc.GetObject(pathname, object.Key, minio.GetObjectOptions{})
 		if err != nil {
+			fmt.Println("get error")
 			fmt.Println(err)
 			return nil
 		}
@@ -149,9 +156,9 @@ func wrapLoad(bucket, key, urlval, jld string) int {
 	//     { "id": "1", "fields":
 	jb := fmt.Sprintf("{\"document\": { \"id\": \"%s\", \"bucket\": \"%s\",  \"fields\": %s }}", key, bucket, value)
 
-	puturl := fmt.Sprintf("http://0.0.0.0:10002/rest/%s", key)
-
-	resp, err := resty.R().
+	puturl := fmt.Sprintf("http://localhost:10002/rest/%s", key) /// -http-port defines in blast startup
+client := resty.New()
+	resp, err := client.R().
 		SetBody(jb).
 		Put(puturl)
 	if err != nil {
@@ -164,10 +171,11 @@ func wrapLoad(bucket, key, urlval, jld string) int {
 // Set up minio and initialize client
 func miniConnection() *minio.Client {
 	endpoint := "localhost:9000"
-	accessKeyID := "AKIAIOSFODNN7EXAMPLE"
-	secretAccessKey := "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+	accessKeyID := "MySecretAccessKey"
+	secretAccessKey := "MySecretSecretKeyforMinio"
 	useSSL := false
-	minioClient, err := minio.New(endpoint, accessKeyID, secretAccessKey, useSSL)
+	minioClient, err := minio.NewV2(endpoint, accessKeyID, secretAccessKey, useSSL)
+        minioClient.SetCustomTransport(&http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}})
 	if err != nil {
 		log.Fatalln(err)
 	}
